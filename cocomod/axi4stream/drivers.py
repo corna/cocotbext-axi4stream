@@ -140,14 +140,20 @@ class Axi4StreamSlave(BusDriver):
                 entity: handle to the simulator entity
                 name: name of the bus
                 clock: handle to the clk associated with this bus
-                tready_delay (int, optional): number of delay clock cycles
-                    between a high TVALID and the assertion of TREADY.
+                tready_delay (int or callable, optional): number of delay clock
+                    cycles between a high TVALID and the assertion of TREADY.
+                    Can also be a function, which is called at the TVALID
+                    rising edge should return the number of delay cycles to
+                    assert TREADY.
                     Defaults to -1 , which sets TREADY always to 1, regardless
                     of the value of TVALID.
-                consecutive_transfers (int, optional): the maximum number of
-                    uninterrupted transfers (high TVALID and TREADY on
-                    consecutive clock cycles) after which TREADY will be
+                consecutive_transfers (int or callable, optional): the maximum
+                    number of uninterrupted transfers (high TVALID and TREADY
+                    on consecutive clock cycles) after which TREADY will be
                     de-asserted and the tready_delay will be restarted.
+                    Can also be a function, which is called at the beginning of
+                    each transfer and should return the maximum allowed number
+                    of consecutive transfers.
                     Default to 0, which allows an unlimited number of
                     consecutive transfers.
         """
@@ -156,7 +162,7 @@ class Axi4StreamSlave(BusDriver):
 
         # If TREADY is not present, this Driver does nothing
         if hasattr(self.bus, "TREADY"):
-            if tready_delay == -1:
+            if not callable(tready_delay) and tready_delay == -1:
                 # If TREADY has to be always high, just set it to 1
                 self.bus.TREADY.setimmediatevalue(1)
             else:
@@ -171,8 +177,6 @@ class Axi4StreamSlave(BusDriver):
     @cocotb.coroutine
     def _receive_data(self):
 
-        tready_high_delay = ClockCycles(self.clock, self.tready_delay)
-
         while True:
             # Wait for a high TVALID, if not already high
             if not self.bus.TVALID.value:
@@ -181,16 +185,26 @@ class Axi4StreamSlave(BusDriver):
             # Wait either for the required number of clock cycles or for a low
             # TVALID. By AXI4-Stream standard, the master should not de-assert
             # TVALID until at least one transfer has been performed but, if it
-            # does it anyways, just restart the wait.
+            # does it anyways, just re-start the wait.
+            if callable(self.tready_delay):
+                tready_high_delay = ClockCycles(self.clock,
+                                                self.tready_delay(self.bus))
+            else:
+                tready_high_delay = ClockCycles(self.clock, self.tready_delay)
+
             trigger = yield [tready_high_delay, FallingEdge(self.bus.TVALID)]
 
             if trigger is tready_high_delay:
                 self.bus.TREADY <= 1
 
-                if self.consecutive_transfers != 0:
-                    tready_high_delay = ClockCycles(self.clock,
-                                                    self.consecutive_transfers)
-                    yield [tready_high_delay, FallingEdge(self.bus.TVALID)]
+                if callable(self.consecutive_transfers):
+                    num_cycles = self.consecutive_transfers(self.bus)
+                else:
+                    num_cycles = self.consecutive_transfers
+
+                if num_cycles != 0:
+                    yield [ClockCycles(self.clock, num_cycles),
+                           FallingEdge(self.bus.TVALID)]
                 else:
                     yield FallingEdge(self.bus.TVALID)
 
