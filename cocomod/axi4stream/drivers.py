@@ -117,6 +117,9 @@ class Axi4StreamMaster(BusDriver):
 
         self.bus.TVALID <= 0
 
+    @property
+    def n_bits(self):
+        return self.bus.TDATA.value.n_bits
 
 class Axi4StreamSlave(BusDriver):
     """
