@@ -87,20 +87,13 @@ class Axi4Stream(BusMonitor):
         clk_redge = RisingEdge(self.clock)
         rdonly = ReadOnly()
 
-        if hasattr(self.bus, "TREADY"):
-            handshake_signals_redge = First(RisingEdge(self.bus.TVALID),
-                                            RisingEdge(self.bus.TREADY))
-        else:
-            handshake_signals_redge = RisingEdge(self.bus.TVALID)
-
         packet = []
 
-        yield clk_redge
-        yield rdonly
-
         while True:
+            yield clk_redge
+            # yield rdonly
 
-            while valid_transfer():
+            if valid_transfer():
                 if self.aux_signals:
                     packet.append(Axi4Stream.Axi4StreamTransfer._make(
                         (getattr(self.bus, signal).value.buff
@@ -110,13 +103,9 @@ class Axi4Stream(BusMonitor):
                     packet.append(self.bus.TDATA.value.buff if
                                   hasattr(self.bus, "TDATA") else None)
 
-                if not self.packets or \
-                   not hasattr(self.bus, "TLAST") or \
-                   hasattr(self.bus, "TLAST") and self.bus.TLAST.value:
+                if not self.packets:
+                    self._recv(packet[0])
+                    packet = []
+                elif self.bus.TLAST.value:
                     self._recv(packet)
                     packet = []
-
-                yield clk_redge
-                yield rdonly
-
-            yield handshake_signals_redge
