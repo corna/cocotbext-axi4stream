@@ -49,7 +49,8 @@ class Axi4Stream(BusMonitor):
     Axi4StreamTransfer = namedtuple('Axi4StreamTransfer',
                                     _optional_data_signals)
 
-    def __init__(self, *args, packets=False, aux_signals=False, **kwargs):
+    def __init__(self, *args, packets=False, aux_signals=False,
+                 data_type="buff", **kwargs):
         """Initialization of Axi4Stream
 
         Args:
@@ -59,6 +60,8 @@ class Axi4Stream(BusMonitor):
             aux_signals (bool, optional): return an Axi4StreamTransfer named
                 tuple containing all the data signals, instead of just TDATA.
                 Defaults to False.
+            data_type (str, optional): select the data type passed to _recv,
+                either "buff" (for binary buffers of bytes) or "integer".
             **kwargs: passed directly to the BusMonitor parent constructor.
         """
         BusMonitor.__init__(self, *args, **kwargs)
@@ -67,8 +70,13 @@ class Axi4Stream(BusMonitor):
             raise AttributeError("\'packets=True\', but \'TLAST\' is missing "
                                  "on this bus")
 
+        if data_type not in ("buff", "integer"):
+            raise AttributeError("data_type must be either \"buff\" or "
+                                 "\"integer\"")
+
         self.packets = packets
         self.aux_signals = aux_signals
+        self.data_type = data_type
 
         self.bus_optional_signals = \
             tuple(signal for signal in Axi4Stream._optional_data_signals
@@ -83,6 +91,10 @@ class Axi4Stream(BusMonitor):
                 return self.bus.TVALID.value and self.bus.TREADY.value
             return self.bus.TVALID.value
 
+        def get_signal_value(signal):
+            handle = getattr(self.bus, signal, None)
+            return getattr(handle.value, self.data_type) if handle else None
+
         # Avoid spurious object creation by recycling
         clk_redge = RisingEdge(self.clock)
         rdonly = ReadOnly()
@@ -96,12 +108,10 @@ class Axi4Stream(BusMonitor):
             if valid_transfer():
                 if self.aux_signals:
                     packet.append(Axi4Stream.Axi4StreamTransfer._make(
-                        (getattr(self.bus, signal).value.buff
-                         if signal in self.bus_optional_signals else None
+                        (get_signal_value(signal)
                          for signal in Axi4Stream._optional_data_signals)))
                 else:
-                    packet.append(self.bus.TDATA.value.buff if
-                                  hasattr(self.bus, "TDATA") else None)
+                    packet.append(get_signal_value("TDATA"))
 
                 if not self.packets:
                     self._recv(packet[0])
