@@ -31,6 +31,7 @@ import cocotb
 from cocotb.drivers import BusDriver
 from cocotb.triggers import ClockCycles, FallingEdge, ReadOnly, RisingEdge
 
+import copy
 
 class Axi4StreamMaster(BusDriver):
     """
@@ -84,6 +85,7 @@ class Axi4StreamMaster(BusDriver):
 
         try:
             iter(data)
+            data = copy.copy(data)  # Keep a local copy
         except TypeError:
             data = (data,)    # If data is not iterable, make it
 
