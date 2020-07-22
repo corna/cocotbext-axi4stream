@@ -27,11 +27,9 @@
 
 """Monitors for Advanced Microcontroller Bus Architecture."""
 
-from collections import namedtuple
-
 from cocotb.decorators import coroutine
 from cocotb.monitors import BusMonitor
-from cocotb.triggers import First, ReadOnly, RisingEdge
+from cocotb.triggers import RisingEdge
 
 
 class Axi4Stream(BusMonitor):
@@ -46,9 +44,6 @@ class Axi4Stream(BusMonitor):
     _optional_data_signals = \
         tuple(signal for signal in _optional_signals if signal != "TREADY")
 
-    Axi4StreamTransfer = namedtuple('Axi4StreamTransfer',
-                                    _optional_data_signals)
-
     def __init__(self, *args, packets=False, aux_signals=False,
                  data_type="buff", **kwargs):
         """Initialization of Axi4Stream
@@ -57,13 +52,16 @@ class Axi4Stream(BusMonitor):
             *args: passed directly to the BusMonitor parent constructor.
             packets (bool, optional): wait for a high TLAST to call _recv.
                 Defaults to False (call _recv on every transaction).
-            aux_signals (bool, optional): return an Axi4StreamTransfer named
-                tuple containing all the data signals, instead of just TDATA.
-                Defaults to False.
+            aux_signals (bool, optional): when true, return a dict for each
+                AXI4-Stream transaction where the key is the name of the signal
+                and the value is the value of it.
+                When false, return an int for each transaction representing
+                the value of the TDATA signal
             data_type (str, optional): select the data type passed to _recv,
                 either "buff" (for binary buffers of bytes) or "integer".
             **kwargs: passed directly to the BusMonitor parent constructor.
         """
+
         BusMonitor.__init__(self, *args, **kwargs)
 
         if packets and not hasattr(self.bus, "TLAST"):
@@ -97,19 +95,15 @@ class Axi4Stream(BusMonitor):
 
         # Avoid spurious object creation by recycling
         clk_redge = RisingEdge(self.clock)
-        rdonly = ReadOnly()
 
         packet = []
-
         while True:
             yield clk_redge
-            # yield rdonly
 
             if valid_transfer():
                 if self.aux_signals:
-                    packet.append(Axi4Stream.Axi4StreamTransfer._make(
-                        (get_signal_value(signal)
-                         for signal in Axi4Stream._optional_data_signals)))
+                    packet.append({signal: get_signal_value(signal)
+                                  for signal in self.bus_optional_signals})
                 else:
                     packet.append(get_signal_value("TDATA"))
 
