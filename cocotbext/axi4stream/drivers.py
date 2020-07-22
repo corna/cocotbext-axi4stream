@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # Copyright (c) 2019 Nicola Corna <nicola.corna@polimi.it>
 # All rights reserved.
 #
@@ -29,7 +29,7 @@
 
 import cocotb
 from cocotb.drivers import BusDriver
-from cocotb.triggers import ClockCycles, FallingEdge, RisingEdge
+from cocotb.triggers import ClockCycles, FallingEdge, First, RisingEdge
 from cocotb.result import TestFailure
 
 import copy
@@ -70,7 +70,7 @@ class Axi4StreamMaster(BusDriver):
                 pass
 
     @cocotb.coroutine
-    def write(self, data, sync=True, tlast_on_last=True):
+    async def write(self, data, sync=True, tlast_on_last=True):
         """
         Write one or more values on the bus.
 
@@ -100,7 +100,7 @@ class Axi4StreamMaster(BusDriver):
         data = copy.copy(data)
 
         if sync:
-            yield RisingEdge(self.clock)
+            await RisingEdge(self.clock)
 
         self.bus.TVALID <= 1
 
@@ -131,12 +131,12 @@ class Axi4StreamMaster(BusDriver):
                index == len(data) - 1:
                 self.bus.TLAST <= 1
 
-            yield RisingEdge(self.clock)
+            await RisingEdge(self.clock)
 
             while True:
                 if not hasattr(self.bus, "TREADY") or self.bus.TREADY.value:
                     break
-                yield RisingEdge(self.clock)
+                await RisingEdge(self.clock)
 
         if hasattr(self.bus, "TLAST") and tlast_on_last:
             self.bus.TLAST <= 0
@@ -206,12 +206,12 @@ class Axi4StreamSlave(BusDriver):
                 cocotb.fork(self._receive_data())
 
     @cocotb.coroutine
-    def _receive_data(self):
+    async def _receive_data(self):
 
         while True:
             # Wait for a high TVALID, if not already high
             if not self.bus.TVALID.value:
-                yield RisingEdge(self.bus.TVALID)
+                await RisingEdge(self.bus.TVALID)
 
             # Wait either for the required number of clock cycles or for a low
             # TVALID. By AXI4-Stream standard, the master should not de-assert
@@ -223,7 +223,8 @@ class Axi4StreamSlave(BusDriver):
             else:
                 tready_high_delay = ClockCycles(self.clock, self.tready_delay)
 
-            trigger = yield [tready_high_delay, FallingEdge(self.bus.TVALID)]
+            trigger = await First(tready_high_delay,
+                                  FallingEdge(self.bus.TVALID))
 
             if trigger is tready_high_delay:
                 self.bus.TREADY <= 1
@@ -234,9 +235,9 @@ class Axi4StreamSlave(BusDriver):
                     num_cycles = self.consecutive_transfers
 
                 if num_cycles != 0:
-                    yield [ClockCycles(self.clock, num_cycles),
-                           FallingEdge(self.bus.TVALID)]
+                    await First(ClockCycles(self.clock, num_cycles),
+                                FallingEdge(self.bus.TVALID))
                 else:
-                    yield FallingEdge(self.bus.TVALID)
+                    await FallingEdge(self.bus.TVALID)
 
                 self.bus.TREADY <= 0

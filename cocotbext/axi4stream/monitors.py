@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # Copyright (c) 2019 Nicola Corna <nicola.corna@polimi.it>
 # All rights reserved.
 #
@@ -27,7 +27,7 @@
 
 """Monitors for Advanced Microcontroller Bus Architecture."""
 
-from cocotb.decorators import coroutine
+import cocotb
 from cocotb.monitors import BusMonitor
 from cocotb.triggers import RisingEdge
 
@@ -80,8 +80,8 @@ class Axi4Stream(BusMonitor):
             tuple(signal for signal in Axi4Stream._optional_data_signals
                   if hasattr(self.bus, signal))
 
-    @coroutine
-    def _monitor_recv(self):
+    @cocotb.coroutine
+    async def _monitor_recv(self):
         """Watch the pins and reconstruct transfers and packets."""
 
         def valid_transfer():
@@ -98,7 +98,7 @@ class Axi4Stream(BusMonitor):
 
         packet = []
         while True:
-            yield clk_redge
+            await clk_redge
 
             if valid_transfer():
                 if self.aux_signals:
