@@ -29,9 +29,11 @@
 
 import cocotb
 from cocotb.drivers import BusDriver
-from cocotb.triggers import ClockCycles, FallingEdge, ReadOnly, RisingEdge
+from cocotb.triggers import ClockCycles, FallingEdge, RisingEdge
+from cocotb.result import TestFailure
 
 import copy
+
 
 class Axi4StreamMaster(BusDriver):
     """
@@ -41,10 +43,7 @@ class Axi4StreamMaster(BusDriver):
     _signals = ["TVALID"]
 
     _optional_signals = [
-        "TREADY", "TDATA", "TLAST",
-
-        # Not currently supported by this driver
-        "TSTRB", "TKEEP", "TID", "TDEST", "TUSER"
+        "TREADY", "TDATA", "TLAST", "TSTRB", "TKEEP", "TID", "TDEST", "TUSER"
     ]
 
     def __init__(self, entity, name, clock):
@@ -62,10 +61,13 @@ class Axi4StreamMaster(BusDriver):
 
         # Drive some sensible defaults (setimmediatevalue to avoid x asserts)
         self.bus.TVALID.setimmediatevalue(0)
-        if hasattr(self.bus, "TDATA"):
-            self.bus.TDATA.setimmediatevalue(0)
-        if hasattr(self.bus, "TLAST"):
-            self.bus.TLAST.setimmediatevalue(0)
+        for signal in self._optional_signals:
+            try:
+                default_value = \
+                    "1" * signal.n_bits if signal in ("TSTRB", "TKEEP") else 0
+                getattr(self.bus, signal).setimmediatevalue(default_value)
+            except AttributeError:
+                pass
 
     @cocotb.coroutine
     def write(self, data, sync=True, tlast_on_last=True):
@@ -73,9 +75,12 @@ class Axi4StreamMaster(BusDriver):
         Write one or more values on the bus.
 
         Args:
-            data (int or iterable of int): the data value(s) to write. If TDATA
-                is not present on the bus, this argument is used to know the
-                number of transfers to perform.
+            data (int/dict or iterable of int/dict): the data values to write.
+                Each dict represents an AXI4-Stream transaction, where the
+                dict's keys are the signal names and the values are the values
+                to write. Missing signals are kept constant.
+                Each int represents the TDATA signal in the AXI4-Stream
+                transaction (so, they are equivalent to {"TDATA": int_value}).
             sync (bool, optional): wait for rising edge on clock initially.
                 Defaults to True.
             tlast_on_last(bool, optional): assert TLAST on the last word
@@ -84,10 +89,15 @@ class Axi4StreamMaster(BusDriver):
         """
 
         try:
+            if isinstance(data, dict):
+                # Treat dict as not iterable to avoid wrong results when using
+                # enumerate method to retrieve data signals.
+                raise TypeError
             iter(data)
-            data = copy.copy(data)  # Keep a local copy
         except TypeError:
             data = (data,)    # If data is not iterable, make it
+
+        data = copy.copy(data)
 
         if sync:
             yield RisingEdge(self.clock)
@@ -95,11 +105,27 @@ class Axi4StreamMaster(BusDriver):
         self.bus.TVALID <= 1
 
         for index, word in enumerate(data):
+            # If word is not a dict, make it (using word as "TDATA")
+            if not isinstance(word, dict):
+                word = {"TDATA": word}
 
-            # If TDATA is not present, use data just to keep track of the
-            # number of transfer cycles
-            if hasattr(self.bus, "TDATA"):
-                self.bus.TDATA <= word
+            for signal, value in word.items():
+                err_msg = \
+                    f"During transfer {index}, signal {signal} has been "
+                "passed, but it is "
+                if signal == 'TREADY':
+                    raise TestFailure(err_msg + "an input for the driver")
+                elif signal == 'TLAST' and tlast_on_last:
+                    raise TestFailure(err_msg + "already controlled by the "
+                                                "driver (tlast_on_last=True)")
+                elif signal not in Axi4StreamMaster._optional_signals:
+                    raise TestFailure(err_msg + "not a valid "
+                                                "AXI4-Stream signal")
+
+                try:
+                    getattr(self.bus, signal) <= value
+                except AttributeError:
+                    raise TestFailure(err_msg + "not present on the bus")
 
             if hasattr(self.bus, "TLAST") and tlast_on_last and \
                index == len(data) - 1:
@@ -120,6 +146,7 @@ class Axi4StreamMaster(BusDriver):
     @property
     def n_bits(self):
         return self.bus.TDATA.value.n_bits
+
 
 class Axi4StreamSlave(BusDriver):
     """
