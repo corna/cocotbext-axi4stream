@@ -60,14 +60,15 @@ class Axi4StreamMaster(BusDriver):
         self.clock = clock
 
         # Drive some sensible defaults (setimmediatevalue to avoid x asserts)
-        self.bus.TVALID.setimmediatevalue(0)
-        for signal in self._optional_signals:
-            try:
-                default_value = \
-                    "1" * signal.n_bits if signal in ("TSTRB", "TKEEP") else 0
-                getattr(self.bus, signal).setimmediatevalue(default_value)
-            except AttributeError:
-                pass
+        for signal in self._signals + self._optional_signals:
+            if signal != "TREADY":
+                try:
+                    default_value = \
+                        2 ** getattr(self.bus, signal).value.n_bits - 1 \
+                        if signal in ("TSTRB", "TKEEP") else 0
+                    getattr(self.bus, signal).setimmediatevalue(default_value)
+                except AttributeError:
+                    pass
 
     @cocotb.coroutine
     async def write(self, data, sync=True, tlast_on_last=True):
@@ -76,11 +77,11 @@ class Axi4StreamMaster(BusDriver):
 
         Args:
             data (int/dict or iterable of int/dict): the data values to write.
-                Each dict represents an AXI4-Stream transaction, where the
-                dict's keys are the signal names and the values are the values
-                to write. Missing signals are kept constant.
+                Each dict represents an AXI4-Stream transfer, where the dict's
+                keys are the signal names and the values are the values to
+                write. Missing signals are kept constant.
                 Each int represents the TDATA signal in the AXI4-Stream
-                transaction (so, they are equivalent to {"TDATA": int_value}).
+                transfer (so, they are equivalent to {"TDATA": int_value}).
             sync (bool, optional): wait for rising edge on clock initially.
                 Defaults to True.
             tlast_on_last(bool, optional): assert TLAST on the last word
@@ -111,8 +112,8 @@ class Axi4StreamMaster(BusDriver):
 
             for signal, value in word.items():
                 err_msg = \
-                    f"During transfer {index}, signal {signal} has been "
-                "passed, but it is "
+                    f"During transfer {index}, signal {signal} has been " \
+                    "passed, but it is "
                 if signal == 'TREADY':
                     raise TestFailure(err_msg + "an input for the driver")
                 elif signal == 'TLAST' and tlast_on_last:
@@ -132,10 +133,7 @@ class Axi4StreamMaster(BusDriver):
                 self.bus.TLAST <= 1
 
             await RisingEdge(self.clock)
-
-            while True:
-                if not hasattr(self.bus, "TREADY") or self.bus.TREADY.value:
-                    break
+            while hasattr(self.bus, "TREADY") and not self.bus.TREADY.value:
                 await RisingEdge(self.clock)
 
         if hasattr(self.bus, "TLAST") and tlast_on_last:
@@ -174,17 +172,18 @@ class Axi4StreamSlave(BusDriver):
                 tready_delay (int or callable, optional): number of delay clock
                     cycles between a high TVALID and the assertion of TREADY.
                     Can also be a function, which is called at the TVALID
-                    rising edge should return the number of delay cycles to
-                    assert TREADY.
+                    rising edge and should return the number of delay cycles to
+                    assert TREADY (non negative number).
                     Defaults to -1 , which sets TREADY always to 1, regardless
                     of the value of TVALID.
                 consecutive_transfers (int or callable, optional): the maximum
                     number of uninterrupted transfers (high TVALID and TREADY
                     on consecutive clock cycles) after which TREADY will be
-                    de-asserted and the tready_delay will be restarted.
+                    de-asserted and the tready_delay will be restarted. Ignored
+                    when tready_delay = -1.
                     Can also be a function, which is called at the beginning of
                     each transfer and should return the maximum allowed number
-                    of consecutive transfers.
+                    of consecutive transfers (non negative number).
                     Default to 0, which allows an unlimited number of
                     consecutive transfers.
         """
@@ -234,10 +233,11 @@ class Axi4StreamSlave(BusDriver):
                 else:
                     num_cycles = self.consecutive_transfers
 
-                if num_cycles != 0:
+                if num_cycles != 0 and tready_high_delay != -1:
                     await First(ClockCycles(self.clock, num_cycles),
                                 FallingEdge(self.bus.TVALID))
                 else:
                     await FallingEdge(self.bus.TVALID)
 
                 self.bus.TREADY <= 0
+                await RisingEdge(self.clock)

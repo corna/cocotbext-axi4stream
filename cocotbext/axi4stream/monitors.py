@@ -51,12 +51,12 @@ class Axi4Stream(BusMonitor):
         Args:
             *args: passed directly to the BusMonitor parent constructor.
             packets (bool, optional): wait for a high TLAST to call _recv.
-                Defaults to False (call _recv on every transaction).
+                Defaults to False (call _recv on every transfer).
             aux_signals (bool, optional): when true, return a dict for each
-                AXI4-Stream transaction where the key is the name of the signal
+                AXI4-Stream transfer where the key is the name of the signal
                 and the value is the value of it.
-                When false, return an int for each transaction representing
-                the value of the TDATA signal
+                When false, return an int for each transfer representing the
+                value of the TDATA signal
             data_type (str, optional): select the data type passed to _recv,
                 either "buff" (for binary buffers of bytes) or "integer".
             **kwargs: passed directly to the BusMonitor parent constructor.
@@ -78,7 +78,8 @@ class Axi4Stream(BusMonitor):
 
         self.bus_optional_signals = \
             tuple(signal for signal in Axi4Stream._optional_data_signals
-                  if hasattr(self.bus, signal))
+                  if hasattr(self.bus, signal) and
+                  (signal != "TLAST" or not packets))
 
     @cocotb.coroutine
     async def _monitor_recv(self):
