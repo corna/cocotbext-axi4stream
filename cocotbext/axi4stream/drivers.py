@@ -28,7 +28,7 @@
 """Drivers for Advanced Microcontroller Bus Architecture."""
 
 import cocotb
-from cocotb.drivers import BusDriver
+from cocotb_bus.drivers import BusDriver
 from cocotb.triggers import ClockCycles, FallingEdge, First, RisingEdge
 from cocotb.result import TestFailure
 
