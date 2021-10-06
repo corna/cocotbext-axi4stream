@@ -28,7 +28,7 @@
 """Monitors for Advanced Microcontroller Bus Architecture."""
 
 import cocotb
-from cocotb.monitors import BusMonitor
+from cocotb_bus.monitors import BusMonitor
 from cocotb.triggers import RisingEdge
 
 
