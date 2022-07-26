@@ -103,7 +103,7 @@ class Axi4StreamMaster(BusDriver):
         if sync:
             await RisingEdge(self.clock)
 
-        self.bus.TVALID <= 1
+        self.bus.TVALID.value = 1
 
         for index, word in enumerate(data):
             # If word is not a dict, make it (using word as "TDATA")
@@ -124,22 +124,22 @@ class Axi4StreamMaster(BusDriver):
                                                 "AXI4-Stream signal")
 
                 try:
-                    getattr(self.bus, signal) <= value
+                    getattr(self.bus, signal).value = value
                 except AttributeError:
                     raise TestFailure(err_msg + "not present on the bus")
 
             if hasattr(self.bus, "TLAST") and tlast_on_last and \
                index == len(data) - 1:
-                self.bus.TLAST <= 1
+                self.bus.TLAST.value = 1
 
             await RisingEdge(self.clock)
             while hasattr(self.bus, "TREADY") and not self.bus.TREADY.value:
                 await RisingEdge(self.clock)
 
         if hasattr(self.bus, "TLAST") and tlast_on_last:
-            self.bus.TLAST <= 0
+            self.bus.TLAST.value = 0
 
-        self.bus.TVALID <= 0
+        self.bus.TVALID.value = 0
 
     @property
     def n_bits(self):
@@ -226,7 +226,7 @@ class Axi4StreamSlave(BusDriver):
                                   FallingEdge(self.bus.TVALID))
 
             if trigger is tready_high_delay:
-                self.bus.TREADY <= 1
+                self.bus.TREADY.value = 1
 
                 if callable(self.consecutive_transfers):
                     num_cycles = self.consecutive_transfers(self.bus)
@@ -239,5 +239,5 @@ class Axi4StreamSlave(BusDriver):
                 else:
                     await FallingEdge(self.bus.TVALID)
 
-                self.bus.TREADY <= 0
+                self.bus.TREADY.value = 0
                 await RisingEdge(self.clock)
