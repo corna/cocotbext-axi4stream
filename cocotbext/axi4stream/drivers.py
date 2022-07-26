@@ -60,7 +60,9 @@ class Axi4StreamMaster(BusDriver):
         self.clock = clock
 
         # Drive some sensible defaults (setimmediatevalue to avoid x asserts)
-        for signal in self._signals + self._optional_signals:
+        signals = {**self._signals, **self._optional_signals} if isinstance(self._signals, dict) else \
+                self._signals + self._optional_signals
+        for signal in signals:
             if signal != "TREADY":
                 try:
                     default_value = \
