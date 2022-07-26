@@ -46,7 +46,7 @@ class Axi4StreamMaster(BusDriver):
         "TREADY", "TDATA", "TLAST", "TSTRB", "TKEEP", "TID", "TDEST", "TUSER"
     ]
 
-    def __init__(self, entity, name, clock):
+    def __init__(self, entity, name, clock, array_idx=None):
         """
             Initialization of AxiStreamMaster
 
@@ -56,7 +56,7 @@ class Axi4StreamMaster(BusDriver):
                 clock: handle to the clk associated with this bus
         """
 
-        BusDriver.__init__(self, entity, name, clock)
+        BusDriver.__init__(self, entity, name, clock, array_idx=array_idx)
         self.clock = clock
 
         # Drive some sensible defaults (setimmediatevalue to avoid x asserts)
@@ -161,7 +161,7 @@ class Axi4StreamSlave(BusDriver):
     ]
 
     def __init__(self, entity, name, clock, tready_delay=-1,
-                 consecutive_transfers=0):
+                 consecutive_transfers=0, array_idx=None):
         """
             Initialization of AxiStreamSlave
 
@@ -188,7 +188,7 @@ class Axi4StreamSlave(BusDriver):
                     consecutive transfers.
         """
 
-        BusDriver.__init__(self, entity, name, clock)
+        BusDriver.__init__(self, entity, name, clock, array_idx=array_idx)
 
         # If TREADY is not present, this Driver does nothing
         if hasattr(self.bus, "TREADY"):
