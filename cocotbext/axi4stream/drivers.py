@@ -202,7 +202,7 @@ class Axi4StreamSlave(BusDriver):
                 self.tready_delay = tready_delay
                 self.consecutive_transfers = consecutive_transfers
 
-                cocotb.fork(self._receive_data())
+                cocotb.start_soon(self._receive_data())
 
     @cocotb.coroutine
     async def _receive_data(self):
