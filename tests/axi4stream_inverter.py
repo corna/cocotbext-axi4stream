@@ -15,7 +15,7 @@ CLK_PERIOD = 10
 
 @cocotb.coroutine
 async def setup_dut(dut):
-    cocotb.fork(Clock(dut.aclk, CLK_PERIOD, "ns").start())
+    cocotb.start_soon(Clock(dut.aclk, CLK_PERIOD, "ns").start())
     dut.aresetn.value = 0
     await Timer(CLK_PERIOD * 2, "ns")
     dut.aresetn.value = 1
